@@ -124,6 +124,9 @@ const Labirinto = () => {
     direction: null,
   });
   const trailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
+  const keysPressed = useRef<Set<string>>(new Set());
+  const moveIntervalRef = useRef<NodeJS.Timeout>();
+  const lastMoveTimeRef = useRef<number>(0);
 
   const goal = useMemo<Position>(() => ({ x: COLS - 1, y: ROWS - 1 }), []);
 
@@ -154,8 +157,9 @@ const Labirinto = () => {
     return nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS;
   };
 
-  const handleMove = (dir: Direction) => {
-    if (!maze.length || won || playerPosRef.current.progress < 1) return;
+  const handleMove = (dir: Direction, isFastMove = false) => {
+    const minProgress = isFastMove ? 0.5 : 1;
+    if (!maze.length || won || playerPosRef.current.progress < minProgress) return;
     if (!canMove(player, dir)) return;
 
     const next = { x: player.x + deltas[dir].x, y: player.y + deltas[dir].y };
@@ -182,27 +186,61 @@ const Labirinto = () => {
   };
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const map: Record<string, Direction> = {
-        ArrowUp: 'top',
-        w: 'top',
-        ArrowRight: 'right',
-        d: 'right',
-        ArrowDown: 'bottom',
-        s: 'bottom',
-        ArrowLeft: 'left',
-        a: 'left',
-      };
+    const keyMap: Record<string, Direction> = {
+      ArrowUp: 'top',
+      w: 'top',
+      ArrowRight: 'right',
+      d: 'right',
+      ArrowDown: 'bottom',
+      s: 'bottom',
+      ArrowLeft: 'left',
+      a: 'left',
+    };
 
-      const dir = map[event.key];
-      if (dir) {
-        event.preventDefault();
-        handleMove(dir);
+    const onKeyDown = (event: KeyboardEvent) => {
+      const dir = keyMap[event.key];
+      if (!dir || won) return;
+
+      event.preventDefault();
+
+      // Se a tecla já está pressionada, não faz nada (evita repetição do browser)
+      if (keysPressed.current.has(event.key)) return;
+
+      keysPressed.current.add(event.key);
+
+      // Primeiro movimento imediato
+      handleMove(dir, false);
+
+      // Configurar movimento contínuo após delay inicial
+      if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
+
+      moveIntervalRef.current = setTimeout(() => {
+        const continuousMove = () => {
+          if (keysPressed.current.has(event.key) && !won) {
+            handleMove(dir, true);
+            moveIntervalRef.current = setTimeout(continuousMove, 80); // movimento rápido a cada 80ms
+          }
+        };
+        continuousMove();
+      }, 250); // delay inicial de 250ms antes do movimento contínuo
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      keysPressed.current.delete(event.key);
+      if (moveIntervalRef.current) {
+        clearTimeout(moveIntervalRef.current);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
+      keysPressed.current.clear();
+    };
   }, [maze, player, won]);
 
   useEffect(() => {
@@ -217,7 +255,9 @@ const Labirinto = () => {
 
     const animate = () => {
       if (playerPosRef.current.progress < 1) {
-        playerPosRef.current.progress = Math.min(1, playerPosRef.current.progress + 0.15);
+        // Aceleração da animação durante movimento rápido
+        const speedMultiplier = keysPressed.current.size > 0 ? 0.25 : 0.15;
+        playerPosRef.current.progress = Math.min(1, playerPosRef.current.progress + speedMultiplier);
       }
 
       const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -458,6 +498,8 @@ const Labirinto = () => {
     setTimer(0);
     setIsRunning(false);
     confettiRef.current = [];
+    keysPressed.current.clear();
+    if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
