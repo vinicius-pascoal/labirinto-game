@@ -667,6 +667,13 @@ const Labirinto = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   };
 
+  // Remove getRandomDifficulty from render flow
+  // Use this helper inside event handlers only
+  const getRandomDifficulty = (): Difficulty => {
+    const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+    return difficulties[Math.floor(Math.random() * difficulties.length)];
+  };
+
   const startGame = (mode: GameMode, diff?: Difficulty) => {
     setGameMode(mode);
     if (diff) setDifficulty(diff);
@@ -677,8 +684,11 @@ const Labirinto = () => {
       setTimer(0);
       setMazesCompleted(0);
       // Definir dificuldade aleatória inicial para modo infinito
-      const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
-      setInfiniteDifficulty(difficulties[Math.floor(Math.random() * difficulties.length)]);
+      const randomDiff = (() => {
+        const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+        return difficulties[Math.floor(Math.random() * difficulties.length)];
+      })();
+      setInfiniteDifficulty(randomDiff);
     } else {
       setTimer(0);
     }
