@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Direction = 'top' | 'right' | 'bottom' | 'left';
-type GameMode = 'menu' | 'standard' | 'race';
+type GameMode = 'menu' | 'standard' | 'race' | 'infinite';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 type MazeCell = {
@@ -99,6 +99,7 @@ const Labirinto = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [infiniteDifficulty, setInfiniteDifficulty] = useState<Difficulty>('medium');
   const [mazesCompleted, setMazesCompleted] = useState(0);
   const [maze, setMaze] = useState<MazeCell[][]>([]);
   const [player, setPlayer] = useState<Position>({ x: 0, y: 0 });
@@ -193,6 +194,9 @@ const Labirinto = () => {
       if (level === 1) return 'medium';
       return 'hard';
     }
+    if (gameMode === 'infinite') {
+      return infiniteDifficulty;
+    }
     return difficulty;
   };
 
@@ -280,6 +284,12 @@ const Labirinto = () => {
       setMazesCompleted(0);
     }
 
+    // Se for modo infinito, escolher nova dificuldade aleatória
+    if (gameMode === 'infinite' && !backToMenu) {
+      const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+      setInfiniteDifficulty(difficulties[Math.floor(Math.random() * difficulties.length)]);
+    }
+
     setIsRunning(false);
     confettiRef.current = [];
     keysPressed.current.clear();
@@ -319,7 +329,7 @@ const Labirinto = () => {
     if (!isRunning) setIsRunning(true);
 
     if (next.x === goal.x && next.y === goal.y) {
-      if (gameMode === 'race') {
+      if (gameMode === 'race' || gameMode === 'infinite') {
         setMazesCompleted((m) => m + 1);
         setTimeout(() => {
           handleReset(false); // Resetar sem voltar ao menu
@@ -663,6 +673,12 @@ const Labirinto = () => {
     if (mode === 'race') {
       setTimer(RACE_TIME_LIMIT);
       setMazesCompleted(0);
+    } else if (mode === 'infinite') {
+      setTimer(0);
+      setMazesCompleted(0);
+      // Definir dificuldade aleatória inicial para modo infinito
+      const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+      setInfiniteDifficulty(difficulties[Math.floor(Math.random() * difficulties.length)]);
     } else {
       setTimer(0);
     }
@@ -684,7 +700,7 @@ const Labirinto = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl animate-scale-in">
+        <div className="grid md:grid-cols-3 gap-6 w-full max-w-6xl animate-scale-in">
           {/* Modo Padrão */}
           <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
             <div className="flex items-center gap-3 mb-4">
@@ -744,6 +760,40 @@ const Labirinto = () => {
               Iniciar Corrida 🏁
             </button>
           </div>
+
+          {/* Modo Infinito */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-green-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">Modo Infinito</h2>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Continue jogando labirintos infinitamente! Cada labirinto tem uma dificuldade aleatória.
+            </p>
+            <div className="bg-green-50 rounded-lg p-4 mb-6 border border-green-200">
+              <div className="flex items-center gap-2 text-sm text-green-700 mb-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <span className="font-semibold">Características:</span>
+              </div>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• Sem limite de tempo</li>
+                <li>• Dificuldade aleatória</li>
+                <li>• Progressão automática</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => startGame('infinite')}
+              className="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold text-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 hover:scale-105 shadow-md"
+            >
+              Iniciar Infinito ♾️
+            </button>
+          </div>
         </div>
 
         <div className="text-center text-sm text-gray-500 animate-fade-in-delay mt-4">
@@ -764,11 +814,11 @@ const Labirinto = () => {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 py-12 px-4">
       <div className="text-center space-y-2 animate-fade-in">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          {gameMode === 'race' ? '🏁 Modo Corrida' : '🎯 Modo Padrão'}
+          {gameMode === 'race' ? '🏁 Modo Corrida' : gameMode === 'infinite' ? '♾️ Modo Infinito' : '🎯 Modo Padrão'}
         </h1>
         <p className="text-sm text-gray-600">
           Dificuldade: <span className="font-bold text-purple-600">{DIFFICULTY_CONFIG[currentDiff].label}</span>
-          {gameMode === 'race' && (
+          {(gameMode === 'race' || gameMode === 'infinite') && (
             <span className="ml-3">
               Labirintos: <span className="font-bold text-blue-600">{mazesCompleted}</span>
             </span>

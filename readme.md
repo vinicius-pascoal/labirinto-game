@@ -7,6 +7,7 @@ Jogo de labirinto em Canvas com personagem animado (panda em pixel art), geraç�
 ### 🎮 Modos de Jogo
 - **Modo Padrão**: Escolha a dificuldade e tente fazer o melhor tempo
 - **Modo Corrida**: Complete o máximo de labirintos em 5 minutos com dificuldade progressiva
+- **Modo Infinito**: Jogue labirintos infinitamente com dificuldades aleatórias e sem limite de tempo
 
 ### 🐼 Personagem Animado
 - Panda em pixel art com animações GIF direcionais
@@ -85,6 +86,13 @@ public/
   - 2-3 labirintos: Médio
   - 4+ labirintos: Difícil
 - Geração automática do próximo labirinto ao completar
+
+### Modo Infinito
+- Sem limite de tempo
+- Dificuldade aleatória para cada labirinto (Fácil, Médio ou Difícil)
+- Progressão automática infinita
+- Cronômetro crescente para acompanhar tempo total jogado
+- Contador de labirintos completados
 
 ### Performance
 - `requestAnimationFrame` para animações fluidas (60 FPS)
