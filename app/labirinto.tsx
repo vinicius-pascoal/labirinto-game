@@ -94,7 +94,20 @@ const Labirinto = () => {
   const [won, setWon] = useState(false);
   const [moves, setMoves] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [timer, setTimer] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const timerIntervalRef = useRef<NodeJS.Timeout>();
   const animationFrameRef = useRef<number>();
+  const confettiRef = useRef<Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    color: string;
+    size: number;
+    rotation: number;
+    rotationSpeed: number;
+  }>>([]);
   const playerPosRef = useRef<{
     x: number;
     y: number;
@@ -117,6 +130,19 @@ const Labirinto = () => {
   useEffect(() => {
     handleReset();
   }, []);
+
+  useEffect(() => {
+    if (isRunning && !won) {
+      timerIntervalRef.current = setInterval(() => {
+        setTimer((t) => t + 10);
+      }, 10);
+    } else {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    }
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [isRunning, won]);
 
   const canMove = (from: Position, dir: Direction) => {
     const cell = maze[from.y]?.[from.x];
@@ -145,7 +171,14 @@ const Labirinto = () => {
 
     setPlayer(next);
     setMoves((m) => m + 1);
-    if (next.x === goal.x && next.y === goal.y) setWon(true);
+
+    if (!isRunning) setIsRunning(true);
+
+    if (next.x === goal.x && next.y === goal.y) {
+      setWon(true);
+      setIsRunning(false);
+      createConfetti();
+    }
   };
 
   useEffect(() => {
@@ -344,6 +377,39 @@ const Labirinto = () => {
         const alpha = Math.min(1, (Date.now() % 2000) / 1000);
         ctx.fillStyle = `rgba(34, 197, 94, ${0.15 * alpha})`;
         ctx.fillRect(0, 0, width, height);
+
+        // Animar e desenhar confetes
+        confettiRef.current = confettiRef.current.filter((confetti) => {
+          confetti.y += confetti.vy;
+          confetti.x += confetti.vx;
+          confetti.vy += 0.2; // gravidade
+          confetti.rotation += confetti.rotationSpeed;
+
+          if (confetti.y > height + 20) return false;
+
+          ctx.save();
+          ctx.translate(confetti.x, confetti.y);
+          ctx.rotate(confetti.rotation);
+          ctx.fillStyle = confetti.color;
+          ctx.fillRect(-confetti.size / 2, -confetti.size / 2, confetti.size, confetti.size);
+          ctx.restore();
+
+          return true;
+        });
+
+        // Animação de explosão de estrelas ao redor do jogador
+        const starCount = 8;
+        const starRadius = 25 + Math.sin(Date.now() / 200) * 5;
+        for (let i = 0; i < starCount; i++) {
+          const angle = (i / starCount) * Math.PI * 2 + Date.now() / 1000;
+          const sx = playerX + Math.cos(angle) * starRadius;
+          const sy = playerY + Math.sin(angle) * starRadius;
+
+          ctx.fillStyle = `rgba(255, 215, 0, ${0.6 + Math.sin(Date.now() / 100 + i) * 0.4})`;
+          ctx.beginPath();
+          ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -356,10 +422,42 @@ const Labirinto = () => {
     };
   }, [maze, player, won, goal]);
 
+  const createConfetti = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const colors = ['#f87171', '#fb923c', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#ec4899'];
+    confettiRef.current = [];
+
+    for (let i = 0; i < 50; i++) {
+      confettiRef.current.push({
+        x: Math.random() * canvas.width,
+        y: -20 - Math.random() * 100,
+        vx: (Math.random() - 0.5) * 4,
+        vy: Math.random() * 2 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: Math.random() * 8 + 4,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.3,
+      });
+    }
+  };
+
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const milliseconds = Math.floor((ms % 1000) / 10);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+  };
+
   const handleReset = async () => {
     setIsGenerating(true);
     setWon(false);
     setMoves(0);
+    setTimer(0);
+    setIsRunning(false);
+    confettiRef.current = [];
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -406,19 +504,34 @@ const Labirinto = () => {
       <div className="flex flex-col items-center gap-4 animate-slide-up">
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
+            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-gray-600">Tempo:</span>
+            <span className="font-mono font-bold text-purple-600 text-lg">{formatTime(timer)}</span>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
+            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
             <span className="text-gray-600">Movimentos:</span>
             <span className="font-bold text-blue-600 text-lg">{moves}</span>
           </div>
           {won && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-400 to-green-600 rounded-lg shadow-lg animate-bounce-in">
-              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span className="font-semibold text-white">Você venceu!</span>
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-400 to-green-600 rounded-lg shadow-lg animate-bounce-in">
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className="font-semibold text-white">🎉 Você venceu!</span>
+              </div>
+              <div className="text-xs text-gray-600 animate-fade-in-delay">
+                Tempo: <span className="font-mono font-bold text-purple-600">{formatTime(timer)}</span> • {moves} movimentos
+              </div>
             </div>
           )}
         </div>
