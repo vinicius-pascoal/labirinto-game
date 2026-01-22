@@ -139,6 +139,53 @@ const Labirinto = () => {
   const moveIntervalRef = useRef<NodeJS.Timeout>();
   const lastMoveTimeRef = useRef<number>(0);
 
+  // Refs para as imagens do panda
+  const pandaImages = useRef<{
+    idle: HTMLImageElement | null;
+    north: HTMLImageElement | null;
+    south: HTMLImageElement | null;
+    east: HTMLImageElement | null;
+    west: HTMLImageElement | null;
+  }>({
+    idle: null,
+    north: null,
+    south: null,
+    east: null,
+    west: null,
+  });
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+
+  // Carregar imagens do panda
+  useEffect(() => {
+    const loadImages = async () => {
+      const imagePromises = [
+        { key: 'idle', src: '/panda/fat_panda_in_8bit_animation_breathing-idle_south.gif' },
+        { key: 'north', src: '/panda/fat_panda_in_8bit_animation_walk_north.gif' },
+        { key: 'south', src: '/panda/fat_panda_in_8bit_animation_walk_south.gif' },
+        { key: 'east', src: '/panda/fat_panda_in_8bit_animation_walk_east.gif' },
+        { key: 'west', src: '/panda/fat_panda_in_8bit_animation_walk_west.gif' },
+      ].map(({ key, src }) => {
+        return new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            pandaImages.current[key as keyof typeof pandaImages.current] = img;
+            resolve();
+          };
+          img.onerror = () => {
+            console.error(`Erro ao carregar imagem: ${src}`);
+            resolve();
+          };
+          img.src = src;
+        });
+      });
+
+      await Promise.all(imagePromises);
+      setImagesLoaded(true);
+    };
+
+    loadImages();
+  }, []);
+
   const getCurrentDifficulty = (): Difficulty => {
     if (gameMode === 'race') {
       const level = Math.floor(mazesCompleted / 2);
@@ -430,19 +477,12 @@ const Labirinto = () => {
         return true;
       });
 
-      // Calcular rotação baseada na direção
-      let rotation = 0;
-      if (playerPosRef.current.direction) {
-        const rotationMap = { top: -Math.PI / 2, right: 0, bottom: Math.PI / 2, left: Math.PI };
-        rotation = rotationMap[playerPosRef.current.direction];
-      }
-
       // Efeito de squeeze durante movimento
       const squeezeX = playerPosRef.current.progress < 1
-        ? 1 + Math.sin(playerPosRef.current.progress * Math.PI) * 0.15
+        ? 1 + Math.sin(playerPosRef.current.progress * Math.PI) * 0.1
         : 1;
       const squeezeY = playerPosRef.current.progress < 1
-        ? 1 - Math.sin(playerPosRef.current.progress * Math.PI) * 0.15
+        ? 1 - Math.sin(playerPosRef.current.progress * Math.PI) * 0.1
         : 1;
 
       // Efeito de bounce ao chegar
@@ -450,36 +490,66 @@ const Labirinto = () => {
         ? bounceProgress
         : 1;
 
-      ctx.save();
-      ctx.translate(playerX, playerY);
-      ctx.rotate(rotation);
-      ctx.scale(squeezeX * scale, squeezeY * scale);
+      // Desenhar o panda com a animação apropriada
+      if (imagesLoaded) {
+        let currentImage = pandaImages.current.idle;
 
-      const playerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
-      playerGradient.addColorStop(0, '#60a5fa');
-      playerGradient.addColorStop(0.7, '#3b82f6');
-      playerGradient.addColorStop(1, '#2563eb');
+        // Selecionar a imagem baseada na direção atual ou última direção
+        if (playerPosRef.current.direction === 'top') {
+          currentImage = pandaImages.current.north;
+        } else if (playerPosRef.current.direction === 'bottom') {
+          currentImage = pandaImages.current.south;
+        } else if (playerPosRef.current.direction === 'right') {
+          currentImage = pandaImages.current.east;
+        } else if (playerPosRef.current.direction === 'left') {
+          currentImage = pandaImages.current.west;
+        }
 
-      // Intensificar sombra durante movimento
-      const shadowIntensity = playerPosRef.current.progress < 1 ? 15 : 10;
-      ctx.shadowBlur = shadowIntensity;
-      ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
-      ctx.fillStyle = playerGradient;
-      ctx.beginPath();
-      ctx.arc(0, 0, 12, 0, Math.PI * 2);
-      ctx.fill();
+        if (currentImage) {
+          ctx.save();
+          ctx.translate(playerX, playerY);
+          ctx.scale(squeezeX * scale, squeezeY * scale);
 
-      // Adicionar olhos/direção para indicar movimento
-      if (playerPosRef.current.direction) {
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffffff';
+          // Adicionar sombra durante movimento
+          if (playerPosRef.current.progress < 1) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+          }
+
+          // Desenhar a imagem do panda centralizada
+          const pandaSize = CELL_SIZE * 0.9;
+          ctx.drawImage(
+            currentImage,
+            -pandaSize / 2,
+            -pandaSize / 2,
+            pandaSize,
+            pandaSize
+          );
+
+          ctx.restore();
+          ctx.shadowBlur = 0;
+        }
+      } else {
+        // Fallback: desenhar bola enquanto as imagens carregam
+        ctx.save();
+        ctx.translate(playerX, playerY);
+        ctx.scale(squeezeX * scale, squeezeY * scale);
+
+        const playerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+        playerGradient.addColorStop(0, '#60a5fa');
+        playerGradient.addColorStop(0.7, '#3b82f6');
+        playerGradient.addColorStop(1, '#2563eb');
+
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
+        ctx.fillStyle = playerGradient;
         ctx.beginPath();
-        ctx.arc(5, 0, 2, 0, Math.PI * 2);
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
         ctx.fill();
-      }
 
-      ctx.restore();
-      ctx.shadowBlur = 0;
+        ctx.restore();
+        ctx.shadowBlur = 0;
+      }
 
       if (won) {
         const alpha = Math.min(1, (Date.now() % 2000) / 1000);
@@ -528,7 +598,7 @@ const Labirinto = () => {
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [maze, player, won, goal]);
+  }, [maze, player, won, goal, imagesLoaded]);
 
   const createConfetti = () => {
     const canvas = canvasRef.current;
