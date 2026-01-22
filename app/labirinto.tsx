@@ -95,13 +95,22 @@ const Labirinto = () => {
   const [moves, setMoves] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const animationFrameRef = useRef<number>();
-  const playerPosRef = useRef<{ x: number; y: number; targetX: number; targetY: number; progress: number }>({
+  const playerPosRef = useRef<{
+    x: number;
+    y: number;
+    targetX: number;
+    targetY: number;
+    progress: number;
+    direction: Direction | null;
+  }>({
     x: 0,
     y: 0,
     targetX: 0,
     targetY: 0,
     progress: 1,
+    direction: null,
   });
+  const trailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
 
   const goal = useMemo<Position>(() => ({ x: COLS - 1, y: ROWS - 1 }), []);
 
@@ -131,6 +140,7 @@ const Labirinto = () => {
       targetX: next.x,
       targetY: next.y,
       progress: 0,
+      direction: dir,
     };
 
     setPlayer(next);
@@ -178,7 +188,13 @@ const Labirinto = () => {
       }
 
       const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+      const easeOutBack = (t: number) => {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      };
       const progress = easeOutCubic(playerPosRef.current.progress);
+      const bounceProgress = easeOutBack(playerPosRef.current.progress);
 
       const interpolatedX = playerPosRef.current.x + (playerPosRef.current.targetX - playerPosRef.current.x) * progress;
       const interpolatedY = playerPosRef.current.y + (playerPosRef.current.targetY - playerPosRef.current.y) * progress;
@@ -252,17 +268,76 @@ const Labirinto = () => {
       const playerX = interpolatedX * CELL_SIZE + CELL_SIZE / 2;
       const playerY = interpolatedY * CELL_SIZE + CELL_SIZE / 2;
 
-      const playerGradient = ctx.createRadialGradient(playerX, playerY, 0, playerX, playerY, 14);
+      // Adicionar partículas na trilha durante movimento
+      if (playerPosRef.current.progress < 0.8) {
+        trailRef.current.push({ x: playerX, y: playerY, alpha: 0.6 });
+        if (trailRef.current.length > 15) trailRef.current.shift();
+      }
+
+      // Desenhar trilha de partículas
+      trailRef.current = trailRef.current.filter(particle => {
+        particle.alpha -= 0.03;
+        if (particle.alpha <= 0) return false;
+
+        const trailGradient = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, 8);
+        trailGradient.addColorStop(0, `rgba(96, 165, 250, ${particle.alpha * 0.8})`);
+        trailGradient.addColorStop(1, `rgba(59, 130, 246, 0)`);
+        ctx.fillStyle = trailGradient;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        return true;
+      });
+
+      // Calcular rotação baseada na direção
+      let rotation = 0;
+      if (playerPosRef.current.direction) {
+        const rotationMap = { top: -Math.PI / 2, right: 0, bottom: Math.PI / 2, left: Math.PI };
+        rotation = rotationMap[playerPosRef.current.direction];
+      }
+
+      // Efeito de squeeze durante movimento
+      const squeezeX = playerPosRef.current.progress < 1
+        ? 1 + Math.sin(playerPosRef.current.progress * Math.PI) * 0.15
+        : 1;
+      const squeezeY = playerPosRef.current.progress < 1
+        ? 1 - Math.sin(playerPosRef.current.progress * Math.PI) * 0.15
+        : 1;
+
+      // Efeito de bounce ao chegar
+      const scale = playerPosRef.current.progress > 0.7
+        ? bounceProgress
+        : 1;
+
+      ctx.save();
+      ctx.translate(playerX, playerY);
+      ctx.rotate(rotation);
+      ctx.scale(squeezeX * scale, squeezeY * scale);
+
+      const playerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
       playerGradient.addColorStop(0, '#60a5fa');
       playerGradient.addColorStop(0.7, '#3b82f6');
       playerGradient.addColorStop(1, '#2563eb');
 
-      ctx.shadowBlur = 10;
+      // Intensificar sombra durante movimento
+      const shadowIntensity = playerPosRef.current.progress < 1 ? 15 : 10;
+      ctx.shadowBlur = shadowIntensity;
       ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
       ctx.fillStyle = playerGradient;
       ctx.beginPath();
-      ctx.arc(playerX, playerY, 12, 0, Math.PI * 2);
+      ctx.arc(0, 0, 12, 0, Math.PI * 2);
       ctx.fill();
+
+      // Adicionar olhos/direção para indicar movimento
+      if (playerPosRef.current.direction) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(5, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
       ctx.shadowBlur = 0;
 
       if (won) {
@@ -291,7 +366,8 @@ const Labirinto = () => {
     const newMaze = generateMaze(COLS, ROWS);
     setMaze(newMaze);
     setPlayer({ x: 0, y: 0 });
-    playerPosRef.current = { x: 0, y: 0, targetX: 0, targetY: 0, progress: 1 };
+    playerPosRef.current = { x: 0, y: 0, targetX: 0, targetY: 0, progress: 1, direction: null };
+    trailRef.current = [];
 
     setIsGenerating(false);
   };
