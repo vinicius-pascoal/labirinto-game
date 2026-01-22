@@ -15,7 +15,7 @@ type MazeCell = {
 
 type Position = { x: number; y: number };
 
-const CELL_SIZE = 32;
+const CELL_SIZE = 48;
 
 const DIFFICULTY_CONFIG: Record<Difficulty, { cols: number; rows: number; label: string }> = {
   easy: { cols: 11, rows: 9, label: 'Fácil' },
