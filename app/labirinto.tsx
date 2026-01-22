@@ -107,8 +107,8 @@ const Labirinto = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const timerIntervalRef = useRef<NodeJS.Timeout>();
-  const animationFrameRef = useRef<number>();
+  const timerIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const confettiRef = useRef<Array<{
     x: number;
     y: number;
@@ -136,7 +136,7 @@ const Labirinto = () => {
   });
   const trailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
   const keysPressed = useRef<Set<string>>(new Set());
-  const moveIntervalRef = useRef<NodeJS.Timeout>();
+  const moveIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const lastMoveTimeRef = useRef<number>(0);
 
   // Refs para as imagens do panda
@@ -246,6 +246,55 @@ const Labirinto = () => {
     const nx = from.x + deltas[dir].x;
     const ny = from.y + deltas[dir].y;
     return nx >= 0 && nx < cols && ny >= 0 && ny < rows;
+  };
+
+  const createConfetti = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const colors = ['#f87171', '#fb923c', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#ec4899'];
+    confettiRef.current = [];
+
+    for (let i = 0; i < 50; i++) {
+      confettiRef.current.push({
+        x: Math.random() * canvas.width,
+        y: -20 - Math.random() * 100,
+        vx: (Math.random() - 0.5) * 4,
+        vy: Math.random() * 2 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: Math.random() * 8 + 4,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.3,
+      });
+    }
+  };
+
+  const handleReset = async (backToMenu = true) => {
+    setIsGenerating(true);
+    setWon(false);
+    setMoves(0);
+
+    if (backToMenu) {
+      setGameMode('menu');
+      setTimer(0);
+      setMazesCompleted(0);
+    }
+
+    setIsRunning(false);
+    confettiRef.current = [];
+    keysPressed.current.clear();
+    if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const { cols, rows } = getCurrentMazeSize();
+    const newMaze = generateMaze(cols, rows);
+    setMaze(newMaze);
+    setPlayer({ x: 0, y: 0 });
+    playerPosRef.current = { x: 0, y: 0, targetX: 0, targetY: 0, progress: 1, direction: null };
+    trailRef.current = [];
+
+    setIsGenerating(false);
   };
 
   const handleMove = (dir: Direction, isFastMove = false) => {
@@ -600,61 +649,12 @@ const Labirinto = () => {
     };
   }, [maze, player, won, goal, imagesLoaded]);
 
-  const createConfetti = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const colors = ['#f87171', '#fb923c', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#ec4899'];
-    confettiRef.current = [];
-
-    for (let i = 0; i < 50; i++) {
-      confettiRef.current.push({
-        x: Math.random() * canvas.width,
-        y: -20 - Math.random() * 100,
-        vx: (Math.random() - 0.5) * 4,
-        vy: Math.random() * 2 + 3,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        size: Math.random() * 8 + 4,
-        rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.3,
-      });
-    }
-  };
-
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const milliseconds = Math.floor((ms % 1000) / 10);
     return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
-  };
-
-  const handleReset = async (backToMenu = true) => {
-    setIsGenerating(true);
-    setWon(false);
-    setMoves(0);
-
-    if (backToMenu) {
-      setGameMode('menu');
-      setTimer(0);
-      setMazesCompleted(0);
-    }
-
-    setIsRunning(false);
-    confettiRef.current = [];
-    keysPressed.current.clear();
-    if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    const { cols, rows } = getCurrentMazeSize();
-    const newMaze = generateMaze(cols, rows);
-    setMaze(newMaze);
-    setPlayer({ x: 0, y: 0 });
-    playerPosRef.current = { x: 0, y: 0, targetX: 0, targetY: 0, progress: 1, direction: null };
-    trailRef.current = [];
-
-    setIsGenerating(false);
   };
 
   const startGame = (mode: GameMode, diff?: Difficulty) => {
