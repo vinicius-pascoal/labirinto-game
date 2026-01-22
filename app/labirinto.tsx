@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Direction = 'top' | 'right' | 'bottom' | 'left';
+type GameMode = 'menu' | 'standard' | 'race';
+type Difficulty = 'easy' | 'medium' | 'hard';
 
 type MazeCell = {
   x: number;
@@ -13,9 +15,15 @@ type MazeCell = {
 
 type Position = { x: number; y: number };
 
-const CELL_SIZE = 40;
-const COLS = 17;
-const ROWS = 11;
+const CELL_SIZE = 32;
+
+const DIFFICULTY_CONFIG: Record<Difficulty, { cols: number; rows: number; label: string }> = {
+  easy: { cols: 11, rows: 9, label: 'Fácil' },
+  medium: { cols: 14, rows: 10, label: 'Médio' },
+  hard: { cols: 17, rows: 12, label: 'Difícil' },
+};
+
+const RACE_TIME_LIMIT = 5 * 60 * 1000; // 5 minutos em ms
 
 const directions: Direction[] = ['top', 'right', 'bottom', 'left'];
 
@@ -89,6 +97,9 @@ const generateMaze = (cols: number, rows: number) => {
 
 const Labirinto = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [gameMode, setGameMode] = useState<GameMode>('menu');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [mazesCompleted, setMazesCompleted] = useState(0);
   const [maze, setMaze] = useState<MazeCell[][]>([]);
   const [player, setPlayer] = useState<Position>({ x: 0, y: 0 });
   const [won, setWon] = useState(false);
@@ -128,16 +139,47 @@ const Labirinto = () => {
   const moveIntervalRef = useRef<NodeJS.Timeout>();
   const lastMoveTimeRef = useRef<number>(0);
 
-  const goal = useMemo<Position>(() => ({ x: COLS - 1, y: ROWS - 1 }), []);
+  const getCurrentDifficulty = (): Difficulty => {
+    if (gameMode === 'race') {
+      const level = Math.floor(mazesCompleted / 2);
+      if (level === 0) return 'easy';
+      if (level === 1) return 'medium';
+      return 'hard';
+    }
+    return difficulty;
+  };
+
+  const getCurrentMazeSize = () => {
+    const currentDiff = getCurrentDifficulty();
+    return DIFFICULTY_CONFIG[currentDiff];
+  };
+
+  const goal = useMemo<Position>(() => {
+    if (!maze.length) return { x: 0, y: 0 };
+    const cols = maze[0].length;
+    const rows = maze.length;
+    return { x: cols - 1, y: rows - 1 };
+  }, [maze]);
 
   useEffect(() => {
-    handleReset();
+    // Não inicializa automaticamente, aguarda seleção no menu
   }, []);
 
   useEffect(() => {
     if (isRunning && !won) {
       timerIntervalRef.current = setInterval(() => {
-        setTimer((t) => t + 10);
+        setTimer((t) => {
+          if (gameMode === 'race') {
+            const newTime = t - 10;
+            if (newTime <= 0) {
+              setIsRunning(false);
+              setWon(true);
+              return 0;
+            }
+            return newTime;
+          }
+          return t + 10;
+        });
       }, 10);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -145,16 +187,18 @@ const Labirinto = () => {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [isRunning, won]);
+  }, [isRunning, won, gameMode]);
 
   const canMove = (from: Position, dir: Direction) => {
     const cell = maze[from.y]?.[from.x];
     if (!cell) return false;
     if (cell.walls[dir]) return false;
 
+    const cols = maze[0]?.length || 0;
+    const rows = maze.length;
     const nx = from.x + deltas[dir].x;
     const ny = from.y + deltas[dir].y;
-    return nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS;
+    return nx >= 0 && nx < cols && ny >= 0 && ny < rows;
   };
 
   const handleMove = (dir: Direction, isFastMove = false) => {
@@ -179,9 +223,16 @@ const Labirinto = () => {
     if (!isRunning) setIsRunning(true);
 
     if (next.x === goal.x && next.y === goal.y) {
-      setWon(true);
-      setIsRunning(false);
-      createConfetti();
+      if (gameMode === 'race') {
+        setMazesCompleted((m) => m + 1);
+        setTimeout(() => {
+          handleReset(false); // Resetar sem voltar ao menu
+        }, 500);
+      } else {
+        setWon(true);
+        setIsRunning(false);
+        createConfetti();
+      }
     }
   };
 
@@ -247,11 +298,28 @@ const Labirinto = () => {
     const canvas = canvasRef.current;
     if (!canvas || !maze.length) return;
 
+    const cols = maze[0].length;
+    const rows = maze.length;
+    const newWidth = cols * CELL_SIZE;
+    const newHeight = rows * CELL_SIZE;
+
+    if (canvas.width !== newWidth || canvas.height !== newHeight) {
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+    }
+  }, [maze]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !maze.length) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = COLS * CELL_SIZE;
-    const height = ROWS * CELL_SIZE;
+    const cols = maze[0].length;
+    const rows = maze.length;
+    const width = cols * CELL_SIZE;
+    const height = rows * CELL_SIZE;
 
     const animate = () => {
       if (playerPosRef.current.progress < 1) {
@@ -491,11 +559,17 @@ const Labirinto = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   };
 
-  const handleReset = async () => {
+  const handleReset = async (backToMenu = true) => {
     setIsGenerating(true);
     setWon(false);
     setMoves(0);
-    setTimer(0);
+
+    if (backToMenu) {
+      setGameMode('menu');
+      setTimer(0);
+      setMazesCompleted(0);
+    }
+
     setIsRunning(false);
     confettiRef.current = [];
     keysPressed.current.clear();
@@ -503,7 +577,8 @@ const Labirinto = () => {
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const newMaze = generateMaze(COLS, ROWS);
+    const { cols, rows } = getCurrentMazeSize();
+    const newMaze = generateMaze(cols, rows);
     setMaze(newMaze);
     setPlayer({ x: 0, y: 0 });
     playerPosRef.current = { x: 0, y: 0, targetX: 0, targetY: 0, progress: 1, direction: null };
@@ -512,25 +587,132 @@ const Labirinto = () => {
     setIsGenerating(false);
   };
 
+  const startGame = (mode: GameMode, diff?: Difficulty) => {
+    setGameMode(mode);
+    if (diff) setDifficulty(diff);
+    if (mode === 'race') {
+      setTimer(RACE_TIME_LIMIT);
+      setMazesCompleted(0);
+    } else {
+      setTimer(0);
+    }
+    setWon(false);
+    setMoves(0);
+    handleReset(false);
+  };
+
+  // Menu Principal
+  if (gameMode === 'menu') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8 py-12 px-4 bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+        <div className="text-center space-y-4 animate-fade-in">
+          <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            🧩 Labirinto 2D
+          </h1>
+          <p className="text-lg text-gray-600 max-w-md mx-auto">
+            Escolha seu modo de jogo e teste suas habilidades!
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl animate-scale-in">
+          {/* Modo Padrão */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">Modo Padrão</h2>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Escolha a dificuldade e tente fazer o melhor tempo possível!
+            </p>
+            <div className="space-y-3">
+              {(['easy', 'medium', 'hard'] as Difficulty[]).map((diff) => (
+                <button
+                  key={diff}
+                  onClick={() => startGame('standard', diff)}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 hover:scale-105 shadow-md"
+                >
+                  {DIFFICULTY_CONFIG[diff].label} - {DIFFICULTY_CONFIG[diff].cols}x{DIFFICULTY_CONFIG[diff].rows}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Modo Corrida */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-purple-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">Modo Corrida</h2>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Complete o máximo de labirintos em 5 minutos! A dificuldade aumenta a cada 2 labirintos.
+            </p>
+            <div className="bg-purple-50 rounded-lg p-4 mb-6 border border-purple-200">
+              <div className="flex items-center gap-2 text-sm text-purple-700 mb-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <span className="font-semibold">Progressão:</span>
+              </div>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• 0-1 labirintos: Fácil</li>
+                <li>• 2-3 labirintos: Médio</li>
+                <li>• 4+ labirintos: Difícil</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => startGame('race')}
+              className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-bold text-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 hover:scale-105 shadow-md"
+            >
+              Iniciar Corrida 🏁
+            </button>
+          </div>
+        </div>
+
+        <div className="text-center text-sm text-gray-500 animate-fade-in-delay mt-4">
+          <p>
+            Use <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded">WASD</kbd> ou{' '}
+            <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded">↑↓←→</kbd> para jogar
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Interface do Jogo
+  const { cols, rows } = getCurrentMazeSize();
+  const currentDiff = getCurrentDifficulty();
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 py-12 px-4">
       <div className="text-center space-y-2 animate-fade-in">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Labirinto 2D
+          {gameMode === 'race' ? '🏁 Modo Corrida' : '🎯 Modo Padrão'}
         </h1>
         <p className="text-sm text-gray-600">
-          Use <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded">WASD</kbd> ou{' '}
-          <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded ml-1">↑↓←→</kbd>{' '}
-          para mover
+          Dificuldade: <span className="font-bold text-purple-600">{DIFFICULTY_CONFIG[currentDiff].label}</span>
+          {gameMode === 'race' && (
+            <span className="ml-3">
+              Labirintos: <span className="font-bold text-blue-600">{mazesCompleted}</span>
+            </span>
+          )}
         </p>
       </div>
 
-      <div className="relative animate-scale-in">
+      <div className="relative animate-scale-in flex justify-center">
         <canvas
+          key={`canvas-${cols}-${rows}-${gameMode}`}
           ref={canvasRef}
-          width={COLS * CELL_SIZE}
-          height={ROWS * CELL_SIZE}
-          className="rounded-xl border-2 border-gray-300 bg-white shadow-2xl transition-all duration-300 hover:shadow-blue-200"
+          width={cols * CELL_SIZE}
+          height={rows * CELL_SIZE}
+          className="rounded-xl border-2 border-gray-300 bg-white shadow-2xl transition-all duration-300 hover:shadow-blue-200 h-auto"
           style={{
             filter: isGenerating ? 'blur(4px)' : 'none',
             opacity: isGenerating ? 0.5 : 1,
@@ -544,13 +726,15 @@ const Labirinto = () => {
       </div>
 
       <div className="flex flex-col items-center gap-4 animate-slide-up">
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-6 text-sm flex-wrap justify-center">
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="text-gray-600">Tempo:</span>
-            <span className="font-mono font-bold text-purple-600 text-lg">{formatTime(timer)}</span>
+            <span className={`font-mono font-bold text-lg ${gameMode === 'race' && timer < 30000 ? 'text-red-600 animate-pulse' : 'text-purple-600'}`}>
+              {formatTime(timer)}
+            </span>
           </div>
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -559,7 +743,7 @@ const Labirinto = () => {
             <span className="text-gray-600">Movimentos:</span>
             <span className="font-bold text-blue-600 text-lg">{moves}</span>
           </div>
-          {won && (
+          {won && gameMode === 'standard' && (
             <div className="flex flex-col items-center gap-2">
               <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-400 to-green-600 rounded-lg shadow-lg animate-bounce-in">
                 <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -576,26 +760,47 @@ const Labirinto = () => {
               </div>
             </div>
           )}
+          {won && gameMode === 'race' && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-lg shadow-lg animate-bounce-in">
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span className="font-semibold text-white">⏱️ Tempo Esgotado!</span>
+              </div>
+              <div className="text-xs text-gray-600 animate-fade-in-delay">
+                Labirintos completados: <span className="font-bold text-blue-600">{mazesCompleted}</span>
+              </div>
+            </div>
+          )}
         </div>
 
-        <button
-          onClick={handleReset}
-          disabled={isGenerating}
-          className="group relative px-6 py-3 font-medium text-white transition-all duration-200 rounded-lg overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 transition-transform duration-200 group-hover:scale-105"></span>
-          <span className="relative flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            {isGenerating ? 'Gerando...' : 'Novo Labirinto'}
-          </span>
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => handleReset(true)}
+            className="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md"
+          >
+            ← Menu
+          </button>
+          <button
+            onClick={() => handleReset(false)}
+            disabled={isGenerating}
+            className="group relative px-6 py-3 font-medium text-white transition-all duration-200 rounded-lg overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+          >
+            <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 transition-transform duration-200 group-hover:scale-105"></span>
+            <span className="relative flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              {isGenerating ? 'Gerando...' : 'Reiniciar'}
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 text-center text-xs text-gray-500 animate-fade-in-delay">
