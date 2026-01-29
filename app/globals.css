@@ -19,8 +19,13 @@
   }
 }
 
+
 body {
-  background: var(--background);
+  background-image: url('/fundo/fundo.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center center;
+  min-height: 100vh;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -30,6 +35,15 @@ body {
     opacity: 0;
     transform: translateY(-10px);
   }
+
+  body {
+    background-image: url('/fundo/fundo.png');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center center;
+    min-height: 100vh;
+  }
+
 
   to {
     opacity: 1;

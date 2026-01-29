@@ -700,7 +700,7 @@ const Labirinto = () => {
   // Menu Principal
   if (gameMode === 'menu') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-8 py-12 px-4 bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8 py-12 px-4">
         <div className="text-center space-y-4 animate-fade-in">
           <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             🧩 Labirinto 2D
