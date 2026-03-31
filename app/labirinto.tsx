@@ -1,104 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-
-type Direction = 'top' | 'right' | 'bottom' | 'left';
-type GameMode = 'menu' | 'standard' | 'race' | 'infinite';
-type Difficulty = 'easy' | 'medium' | 'hard';
-
-type MazeCell = {
-  x: number;
-  y: number;
-  walls: Record<Direction, boolean>;
-  visited: boolean;
-};
-
-type Position = { x: number; y: number };
-
-const CELL_SIZE = 48;
-
-const DIFFICULTY_CONFIG: Record<Difficulty, { cols: number; rows: number; label: string }> = {
-  easy: { cols: 11, rows: 9, label: 'Fácil' },
-  medium: { cols: 14, rows: 10, label: 'Médio' },
-  hard: { cols: 17, rows: 12, label: 'Difícil' },
-};
-
-const RACE_TIME_LIMIT = 5 * 60 * 1000; // 5 minutos em ms
-
-const directions: Direction[] = ['top', 'right', 'bottom', 'left'];
-
-const deltas: Record<Direction, Position> = {
-  top: { x: 0, y: -1 },
-  right: { x: 1, y: 0 },
-  bottom: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-};
-
-const opposite: Record<Direction, Direction> = {
-  top: 'bottom',
-  right: 'left',
-  bottom: 'top',
-  left: 'right',
-};
-
-const createGrid = (cols: number, rows: number): MazeCell[][] => {
-  return Array.from({ length: rows }, (_, y) =>
-    Array.from({ length: cols }, (_, x) => ({
-      x,
-      y,
-      visited: false,
-      walls: { top: true, right: true, bottom: true, left: true },
-    })),
-  );
-};
-
-const getUnvisitedNeighbors = (grid: MazeCell[][], cell: MazeCell) => {
-  const neighbors: Array<{ dir: Direction; cell: MazeCell }> = [];
-
-  for (const dir of directions) {
-    const nx = cell.x + deltas[dir].x;
-    const ny = cell.y + deltas[dir].y;
-    if (ny < 0 || ny >= grid.length || nx < 0 || nx >= grid[0].length) continue;
-    const candidate = grid[ny][nx];
-    if (!candidate.visited) neighbors.push({ dir, cell: candidate });
-  }
-
-  return neighbors;
-};
-
-const generateMaze = (cols: number, rows: number) => {
-  const grid = createGrid(cols, rows);
-  const stack: MazeCell[] = [];
-
-  const start = grid[0][0];
-  start.visited = true;
-  stack.push(start);
-
-  while (stack.length) {
-    const current = stack[stack.length - 1];
-    const neighbors = getUnvisitedNeighbors(grid, current);
-
-    if (!neighbors.length) {
-      stack.pop();
-      continue;
-    }
-
-    const { dir, cell } = neighbors[Math.floor(Math.random() * neighbors.length)];
-
-    current.walls[dir] = false;
-    cell.walls[opposite[dir]] = false;
-
-    cell.visited = true;
-    stack.push(cell);
-  }
-
-  return grid;
-};
+import { CELL_SIZE, deltas, DIFFICULTY_CONFIG, RACE_TIME_LIMIT } from './labirinto/constants';
+import { formatTime } from './labirinto/format';
+import { canMoveInMaze, generateMaze, getRandomDifficulty } from './labirinto/maze';
+import { useTheme } from './labirinto/useTheme';
+import type { Difficulty, Direction, GameMode, MazeCell, Position } from './labirinto/types';
 
 const Labirinto = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const hasHydratedThemeRef = useRef(false);
+  const { isDark, toggleTheme } = useTheme();
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [infiniteDifficulty, setInfiniteDifficulty] = useState<Difficulty>('medium');
@@ -156,34 +67,6 @@ const Labirinto = () => {
     west: null,
   });
   const [imagesLoaded, setImagesLoaded] = useState(false);
-  const isDark = theme === 'dark';
-
-  useEffect(() => {
-    const storedTheme = window.localStorage.getItem('theme');
-    const resolvedTheme: 'light' | 'dark' =
-      storedTheme === 'light' || storedTheme === 'dark'
-        ? storedTheme
-        : window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light';
-
-    hasHydratedThemeRef.current = true;
-    document.documentElement.setAttribute('data-theme', resolvedTheme);
-    window.localStorage.setItem('theme', resolvedTheme);
-
-    if (resolvedTheme !== 'light') {
-      const timeoutId = window.setTimeout(() => {
-        setTheme(resolvedTheme);
-      }, 0);
-      return () => window.clearTimeout(timeoutId);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hasHydratedThemeRef.current) return;
-    document.documentElement.setAttribute('data-theme', theme);
-    window.localStorage.setItem('theme', theme);
-  }, [theme]);
 
   // Carregar imagens do panda
   useEffect(() => {
@@ -234,10 +117,6 @@ const Labirinto = () => {
     return DIFFICULTY_CONFIG[currentDiff];
   };
 
-  const toggleTheme = () => {
-    setTheme((currentTheme) => (currentTheme === 'light' ? 'dark' : 'light'));
-  };
-
   const goal = useMemo<Position>(() => {
     if (!maze.length) return { x: 0, y: 0 };
     const cols = maze[0].length;
@@ -273,18 +152,6 @@ const Labirinto = () => {
     };
   }, [isRunning, won, gameMode]);
 
-  const canMove = (from: Position, dir: Direction) => {
-    const cell = maze[from.y]?.[from.x];
-    if (!cell) return false;
-    if (cell.walls[dir]) return false;
-
-    const cols = maze[0]?.length || 0;
-    const rows = maze.length;
-    const nx = from.x + deltas[dir].x;
-    const ny = from.y + deltas[dir].y;
-    return nx >= 0 && nx < cols && ny >= 0 && ny < rows;
-  };
-
   const createConfetti = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -319,8 +186,7 @@ const Labirinto = () => {
 
     // Se for modo infinito, escolher nova dificuldade aleatória
     if (gameMode === 'infinite' && !backToMenu) {
-      const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
-      setInfiniteDifficulty(difficulties[Math.floor(Math.random() * difficulties.length)]);
+      setInfiniteDifficulty(getRandomDifficulty());
     }
 
     setIsRunning(false);
@@ -343,7 +209,7 @@ const Labirinto = () => {
   const handleMove = (dir: Direction, isFastMove = false) => {
     const minProgress = isFastMove ? 0.5 : 1;
     if (!maze.length || won || playerPosRef.current.progress < minProgress) return;
-    if (!canMove(player, dir)) return;
+    if (!canMoveInMaze(maze, player, dir)) return;
 
     const next = { x: player.x + deltas[dir].x, y: player.y + deltas[dir].y };
 
@@ -692,14 +558,6 @@ const Labirinto = () => {
     };
   }, [maze, player, won, goal, imagesLoaded, isDark]);
 
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    const milliseconds = Math.floor((ms % 1000) / 10);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
-  };
-
   const startGame = (mode: GameMode, diff?: Difficulty) => {
     setGameMode(mode);
     if (diff) setDifficulty(diff);
@@ -709,12 +567,7 @@ const Labirinto = () => {
     } else if (mode === 'infinite') {
       setTimer(0);
       setMazesCompleted(0);
-      // Definir dificuldade aleatória inicial para modo infinito
-      const randomDiff = (() => {
-        const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
-        return difficulties[Math.floor(Math.random() * difficulties.length)];
-      })();
-      setInfiniteDifficulty(randomDiff);
+      setInfiniteDifficulty(getRandomDifficulty());
     } else {
       setTimer(0);
     }
