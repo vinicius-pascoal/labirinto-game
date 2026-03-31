@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CELL_SIZE, deltas, DIFFICULTY_CONFIG, RACE_TIME_LIMIT } from './labirinto/constants';
 import { canMoveInMaze, generateMaze, getRandomDifficulty } from './labirinto/maze';
 import { useTheme } from './labirinto/useTheme';
+import { useKeyboardMovement } from './labirinto/useKeyboardMovement';
 import { GameHud } from './labirinto/components/GameHud';
 import { MenuScreen } from './labirinto/components/MenuScreen';
 import type { Difficulty, Direction, GameMode, MazeCell, Position } from './labirinto/types';
@@ -50,8 +51,6 @@ const Labirinto = () => {
     direction: null,
   });
   const trailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
-  const keysPressed = useRef<Set<string>>(new Set());
-  const moveIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Refs para as imagens do panda
   const pandaImages = useRef<{
@@ -192,8 +191,7 @@ const Labirinto = () => {
 
     setIsRunning(false);
     confettiRef.current = [];
-    keysPressed.current.clear();
-    if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
+    resetKeyboardInput();
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -242,63 +240,10 @@ const Labirinto = () => {
     }
   };
 
-  useEffect(() => {
-    const keyMap: Record<string, Direction> = {
-      ArrowUp: 'top',
-      w: 'top',
-      ArrowRight: 'right',
-      d: 'right',
-      ArrowDown: 'bottom',
-      s: 'bottom',
-      ArrowLeft: 'left',
-      a: 'left',
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      const dir = keyMap[event.key];
-      if (!dir || won) return;
-
-      event.preventDefault();
-
-      // Se a tecla já está pressionada, não faz nada (evita repetição do browser)
-      if (keysPressed.current.has(event.key)) return;
-
-      keysPressed.current.add(event.key);
-
-      // Primeiro movimento imediato
-      handleMove(dir, false);
-
-      // Configurar movimento contínuo após delay inicial
-      if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
-
-      moveIntervalRef.current = setTimeout(() => {
-        const continuousMove = () => {
-          if (keysPressed.current.has(event.key) && !won) {
-            handleMove(dir, true);
-            moveIntervalRef.current = setTimeout(continuousMove, 80); // movimento rápido a cada 80ms
-          }
-        };
-        continuousMove();
-      }, 250); // delay inicial de 250ms antes do movimento contínuo
-    };
-
-    const onKeyUp = (event: KeyboardEvent) => {
-      keysPressed.current.delete(event.key);
-      if (moveIntervalRef.current) {
-        clearTimeout(moveIntervalRef.current);
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      if (moveIntervalRef.current) clearTimeout(moveIntervalRef.current);
-      keysPressed.current.clear();
-    };
-  }, [maze, player, won]);
+  const { keysPressedRef, resetKeyboardInput } = useKeyboardMovement({
+    won,
+    onMove: handleMove,
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -330,7 +275,7 @@ const Labirinto = () => {
     const animate = () => {
       if (playerPosRef.current.progress < 1) {
         // Aceleração da animação durante movimento rápido
-        const speedMultiplier = keysPressed.current.size > 0 ? 0.25 : 0.15;
+        const speedMultiplier = keysPressedRef.current.size > 0 ? 0.25 : 0.15;
         playerPosRef.current.progress = Math.min(1, playerPosRef.current.progress + speedMultiplier);
       }
 
@@ -557,7 +502,7 @@ const Labirinto = () => {
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [maze, player, won, goal, imagesLoaded, isDark]);
+  }, [maze, player, won, goal, imagesLoaded, isDark, keysPressedRef]);
 
   const startGame = (mode: GameMode, diff?: Difficulty) => {
     setGameMode(mode);
