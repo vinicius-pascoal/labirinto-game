@@ -97,6 +97,18 @@ const generateMaze = (cols: number, rows: number) => {
 
 const Labirinto = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') {
+      return 'light';
+    }
+
+    const storedTheme = window.localStorage.getItem('theme');
+    if (storedTheme === 'light' || storedTheme === 'dark') {
+      return storedTheme;
+    }
+
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [infiniteDifficulty, setInfiniteDifficulty] = useState<Difficulty>('medium');
@@ -155,6 +167,12 @@ const Labirinto = () => {
     west: null,
   });
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const isDark = theme === 'dark';
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Carregar imagens do panda
   useEffect(() => {
@@ -203,6 +221,10 @@ const Labirinto = () => {
   const getCurrentMazeSize = () => {
     const currentDiff = getCurrentDifficulty();
     return DIFFICULTY_CONFIG[currentDiff];
+  };
+
+  const toggleTheme = () => {
+    setTheme((currentTheme) => (currentTheme === 'light' ? 'dark' : 'light'));
   };
 
   const goal = useMemo<Position>(() => {
@@ -449,8 +471,8 @@ const Labirinto = () => {
       ctx.clearRect(0, 0, width, height);
 
       const gradient = ctx.createLinearGradient(0, 0, width, height);
-      gradient.addColorStop(0, '#f8fafc');
-      gradient.addColorStop(1, '#e2e8f0');
+      gradient.addColorStop(0, isDark ? '#0f172a' : '#f8fafc');
+      gradient.addColorStop(1, isDark ? '#1e293b' : '#e2e8f0');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
@@ -462,7 +484,7 @@ const Labirinto = () => {
           const x = cell.x * CELL_SIZE;
           const y = cell.y * CELL_SIZE;
 
-          ctx.strokeStyle = '#1e293b';
+          ctx.strokeStyle = isDark ? '#cbd5e1' : '#1e293b';
 
           if (cell.walls.top) {
             ctx.beginPath();
@@ -527,8 +549,8 @@ const Labirinto = () => {
         if (particle.alpha <= 0) return false;
 
         const trailGradient = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, 8);
-        trailGradient.addColorStop(0, `rgba(96, 165, 250, ${particle.alpha * 0.8})`);
-        trailGradient.addColorStop(1, `rgba(59, 130, 246, 0)`);
+        trailGradient.addColorStop(0, `rgba(125, 211, 252, ${particle.alpha * 0.8})`);
+        trailGradient.addColorStop(1, `rgba(14, 165, 233, 0)`);
         ctx.fillStyle = trailGradient;
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, 6, 0, Math.PI * 2);
@@ -657,7 +679,7 @@ const Labirinto = () => {
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [maze, player, won, goal, imagesLoaded]);
+  }, [maze, player, won, goal, imagesLoaded, isDark]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -700,28 +722,37 @@ const Labirinto = () => {
   // Menu Principal
   if (gameMode === 'menu') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-8 py-12 px-4">
+      <div className={`relative flex min-h-screen flex-col items-center justify-center gap-8 py-12 px-4 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+        <button
+          onClick={toggleTheme}
+          className={`absolute right-4 top-4 rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition-colors ${isDark
+              ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
+              : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
+            }`}
+        >
+          {isDark ? '☀️ Modo claro' : '🌙 Modo escuro'}
+        </button>
         <div className="text-center space-y-4 animate-fade-in">
           <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             🧩 Labirinto 2D
           </h1>
-          <p className="text-lg text-gray-600 max-w-md mx-auto">
+          <p className={`text-lg max-w-md mx-auto ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
             Escolha seu modo de jogo e teste suas habilidades!
           </p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 w-full max-w-6xl animate-scale-in">
           {/* Modo Padrão */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+          <div className={`rounded-2xl shadow-xl p-8 border-2 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${isDark ? 'bg-slate-900/90 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-400'}`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800">Modo Padrão</h2>
+              <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-800'}`}>Modo Padrão</h2>
             </div>
-            <p className="text-gray-600 mb-6">
+            <p className={`mb-6 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
               Escolha a dificuldade e tente fazer o melhor tempo possível!
             </p>
             <div className="space-y-3">
@@ -738,26 +769,26 @@ const Labirinto = () => {
           </div>
 
           {/* Modo Corrida */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-purple-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+          <div className={`rounded-2xl shadow-xl p-8 border-2 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${isDark ? 'bg-slate-900/90 border-slate-700 hover:border-purple-500' : 'bg-white border-gray-200 hover:border-purple-400'}`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800">Modo Corrida</h2>
+              <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-800'}`}>Modo Corrida</h2>
             </div>
-            <p className="text-gray-600 mb-4">
+            <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
               Complete o máximo de labirintos em 5 minutos! A dificuldade aumenta a cada 2 labirintos.
             </p>
-            <div className="bg-purple-50 rounded-lg p-4 mb-6 border border-purple-200">
+            <div className={`rounded-lg p-4 mb-6 border ${isDark ? 'bg-purple-950/35 border-purple-800' : 'bg-purple-50 border-purple-200'}`}>
               <div className="flex items-center gap-2 text-sm text-purple-700 mb-2">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
                 <span className="font-semibold">Progressão:</span>
               </div>
-              <ul className="text-sm text-gray-700 space-y-1">
+              <ul className={`text-sm space-y-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                 <li>• 0-1 labirintos: Fácil</li>
                 <li>• 2-3 labirintos: Médio</li>
                 <li>• 4+ labirintos: Difícil</li>
@@ -772,26 +803,26 @@ const Labirinto = () => {
           </div>
 
           {/* Modo Infinito */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 hover:border-green-400 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+          <div className={`rounded-2xl shadow-xl p-8 border-2 transition-all duration-300 hover:shadow-2xl hover:scale-105 ${isDark ? 'bg-slate-900/90 border-slate-700 hover:border-green-500' : 'bg-white border-gray-200 hover:border-green-400'}`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800">Modo Infinito</h2>
+              <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-800'}`}>Modo Infinito</h2>
             </div>
-            <p className="text-gray-600 mb-4">
+            <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
               Continue jogando labirintos infinitamente! Cada labirinto tem uma dificuldade aleatória.
             </p>
-            <div className="bg-green-50 rounded-lg p-4 mb-6 border border-green-200">
+            <div className={`rounded-lg p-4 mb-6 border ${isDark ? 'bg-green-950/35 border-green-800' : 'bg-green-50 border-green-200'}`}>
               <div className="flex items-center gap-2 text-sm text-green-700 mb-2">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
                 <span className="font-semibold">Características:</span>
               </div>
-              <ul className="text-sm text-gray-700 space-y-1">
+              <ul className={`text-sm space-y-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                 <li>• Sem limite de tempo</li>
                 <li>• Dificuldade aleatória</li>
                 <li>• Progressão automática</li>
@@ -806,10 +837,10 @@ const Labirinto = () => {
           </div>
         </div>
 
-        <div className="text-center text-sm text-gray-500 animate-fade-in-delay mt-4">
+        <div className={`text-center text-sm animate-fade-in-delay mt-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
           <p>
-            Use <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded">WASD</kbd> ou{' '}
-            <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 border border-gray-300 rounded">↑↓←→</kbd> para jogar
+            Use <kbd className={`px-2 py-1 text-xs font-semibold rounded ${isDark ? 'bg-slate-800 border border-slate-600 text-slate-100' : 'bg-gray-100 border border-gray-300'}`}>WASD</kbd> ou{' '}
+            <kbd className={`px-2 py-1 text-xs font-semibold rounded ${isDark ? 'bg-slate-800 border border-slate-600 text-slate-100' : 'bg-gray-100 border border-gray-300'}`}>↑↓←→</kbd> para jogar
           </p>
         </div>
       </div>
@@ -821,12 +852,21 @@ const Labirinto = () => {
   const currentDiff = getCurrentDifficulty();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 py-12 px-4">
+    <div className={`relative flex min-h-screen flex-col items-center justify-center gap-6 py-12 px-4 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+      <button
+        onClick={toggleTheme}
+        className={`absolute right-4 top-4 rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition-colors ${isDark
+            ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
+            : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
+          }`}
+      >
+        {isDark ? '☀️ Modo claro' : '🌙 Modo escuro'}
+      </button>
       <div className="text-center space-y-2 animate-fade-in">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           {gameMode === 'race' ? '🏁 Modo Corrida' : gameMode === 'infinite' ? '♾️ Modo Infinito' : '🎯 Modo Padrão'}
         </h1>
-        <p className="text-sm text-gray-600">
+        <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
           Dificuldade: <span className="font-bold text-purple-600">{DIFFICULTY_CONFIG[currentDiff].label}</span>
           {(gameMode === 'race' || gameMode === 'infinite') && (
             <span className="ml-3">
@@ -842,7 +882,7 @@ const Labirinto = () => {
           ref={canvasRef}
           width={cols * CELL_SIZE}
           height={rows * CELL_SIZE}
-          className="rounded-xl border-2 border-gray-300 bg-white shadow-2xl transition-all duration-300 hover:shadow-blue-200 h-auto"
+          className={`rounded-xl border-2 shadow-2xl transition-all duration-300 h-auto ${isDark ? 'border-slate-600 bg-slate-900 hover:shadow-slate-800/60' : 'border-gray-300 bg-white hover:shadow-blue-200'}`}
           style={{
             filter: isGenerating ? 'blur(4px)' : 'none',
             opacity: isGenerating ? 0.5 : 1,
@@ -857,20 +897,20 @@ const Labirinto = () => {
 
       <div className="flex flex-col items-center gap-4 animate-slide-up">
         <div className="flex items-center gap-6 text-sm flex-wrap justify-center">
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-md border ${isDark ? 'bg-slate-900/90 border-slate-700' : 'bg-white border-gray-200'}`}>
+            <svg className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-gray-600">Tempo:</span>
+            <span className={isDark ? 'text-slate-300' : 'text-gray-600'}>Tempo:</span>
             <span className={`font-mono font-bold text-lg ${gameMode === 'race' && timer < 30000 ? 'text-red-600 animate-pulse' : 'text-purple-600'}`}>
               {formatTime(timer)}
             </span>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-md border border-gray-200">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-md border ${isDark ? 'bg-slate-900/90 border-slate-700' : 'bg-white border-gray-200'}`}>
+            <svg className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="text-gray-600">Movimentos:</span>
+            <span className={isDark ? 'text-slate-300' : 'text-gray-600'}>Movimentos:</span>
             <span className="font-bold text-blue-600 text-lg">{moves}</span>
           </div>
           {won && gameMode === 'standard' && (
@@ -885,7 +925,7 @@ const Labirinto = () => {
                 </svg>
                 <span className="font-semibold text-white">🎉 Você venceu!</span>
               </div>
-              <div className="text-xs text-gray-600 animate-fade-in-delay">
+              <div className={`text-xs animate-fade-in-delay ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
                 Tempo: <span className="font-mono font-bold text-purple-600">{formatTime(timer)}</span> • {moves} movimentos
               </div>
             </div>
@@ -898,7 +938,7 @@ const Labirinto = () => {
                 </svg>
                 <span className="font-semibold text-white">⏱️ Tempo Esgotado!</span>
               </div>
-              <div className="text-xs text-gray-600 animate-fade-in-delay">
+              <div className={`text-xs animate-fade-in-delay ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
                 Labirintos completados: <span className="font-bold text-blue-600">{mazesCompleted}</span>
               </div>
             </div>
@@ -908,7 +948,7 @@ const Labirinto = () => {
         <div className="flex gap-3">
           <button
             onClick={() => handleReset(true)}
-            className="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md"
+            className={`px-6 py-3 text-white rounded-lg font-medium transition-all duration-200 shadow-md ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-500 hover:bg-gray-600'}`}
           >
             ← Menu
           </button>
@@ -933,7 +973,7 @@ const Labirinto = () => {
         </div>
       </div>
 
-      <div className="mt-4 text-center text-xs text-gray-500 animate-fade-in-delay">
+      <div className={`mt-4 text-center text-xs animate-fade-in-delay ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
         <p>
           Alcance o{' '}
           <span className="inline-flex items-center justify-center w-3 h-3 bg-green-500 rounded-full"></span> círculo
