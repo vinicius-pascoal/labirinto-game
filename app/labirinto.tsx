@@ -97,18 +97,8 @@ const generateMaze = (cols: number, rows: number) => {
 
 const Labirinto = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') {
-      return 'light';
-    }
-
-    const storedTheme = window.localStorage.getItem('theme');
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      return storedTheme;
-    }
-
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const hasHydratedThemeRef = useRef(false);
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [infiniteDifficulty, setInfiniteDifficulty] = useState<Difficulty>('medium');
@@ -150,7 +140,6 @@ const Labirinto = () => {
   const trailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
   const keysPressed = useRef<Set<string>>(new Set());
   const moveIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const lastMoveTimeRef = useRef<number>(0);
 
   // Refs para as imagens do panda
   const pandaImages = useRef<{
@@ -170,6 +159,28 @@ const Labirinto = () => {
   const isDark = theme === 'dark';
 
   useEffect(() => {
+    const storedTheme = window.localStorage.getItem('theme');
+    const resolvedTheme: 'light' | 'dark' =
+      storedTheme === 'light' || storedTheme === 'dark'
+        ? storedTheme
+        : window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light';
+
+    hasHydratedThemeRef.current = true;
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+    window.localStorage.setItem('theme', resolvedTheme);
+
+    if (resolvedTheme !== 'light') {
+      const timeoutId = window.setTimeout(() => {
+        setTheme(resolvedTheme);
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedThemeRef.current) return;
     document.documentElement.setAttribute('data-theme', theme);
     window.localStorage.setItem('theme', theme);
   }, [theme]);
@@ -689,13 +700,6 @@ const Labirinto = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   };
 
-  // Remove getRandomDifficulty from render flow
-  // Use this helper inside event handlers only
-  const getRandomDifficulty = (): Difficulty => {
-    const difficulties: Difficulty[] = ['easy', 'medium', 'hard'];
-    return difficulties[Math.floor(Math.random() * difficulties.length)];
-  };
-
   const startGame = (mode: GameMode, diff?: Difficulty) => {
     setGameMode(mode);
     if (diff) setDifficulty(diff);
@@ -726,8 +730,8 @@ const Labirinto = () => {
         <button
           onClick={toggleTheme}
           className={`absolute right-4 top-4 rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition-colors ${isDark
-              ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
-              : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
+            ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
+            : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
             }`}
         >
           {isDark ? '☀️ Modo claro' : '🌙 Modo escuro'}
@@ -856,8 +860,8 @@ const Labirinto = () => {
       <button
         onClick={toggleTheme}
         className={`absolute right-4 top-4 rounded-full px-4 py-2 text-sm font-semibold shadow-lg transition-colors ${isDark
-            ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
-            : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
+          ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600'
+          : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200'
           }`}
       >
         {isDark ? '☀️ Modo claro' : '🌙 Modo escuro'}
